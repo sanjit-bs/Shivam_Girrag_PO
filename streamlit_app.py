@@ -2,6 +2,22 @@ import streamlit as st
 import requests
 from datetime import date
 
+# Sidebar Admin Authentication
+st.sidebar.title("🔐 Access Control")
+admin_pin = st.sidebar.text_input("Enter Admin PIN to edit:", type="password")
+
+IS_ADMIN = (admin_pin == "2000") # Replace with your secure PIN
+
+if IS_ADMIN:
+    st.sidebar.success("🔓 Admin Mode Active")
+    tab1, tab2, tab3 = st.tabs(["📊 Live Dashboard", "📝 New Order Entry", "🔍 Verify Orders"])
+else:
+    st.sidebar.info("👁️ View-Only Mode Active")
+    tab1 = st.tabs(["📊 Live Dashboard"])[0]
+
+with tab1:
+    st.subheader("📋 Purchase Order Status (Read-Only)")
+
 # ==========================================
 # 🔗 PASTE YOUR APPS SCRIPT WEB APP URL HERE
 # ==========================================
