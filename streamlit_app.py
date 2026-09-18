@@ -16,6 +16,8 @@ CREDITORS_LIST = [
     "The Synthetic Glue & Chemical Industries", "VIJAY ENTERPRISE"
 ]
 
+UNITS_LIST = ["Pcs", "Kg", "Mtr", "Box", "Set", "Roll", "Packet", "Gsm", "Ream"]
+
 st.set_page_config(page_title="Purchase Order Manager", layout="wide")
 st.title("📦 Purchase Order & Verification System")
 
@@ -37,11 +39,13 @@ with tab1:
     v = st.session_state.form_version  # Version suffix for widget keys
 
     with st.container(border=True):
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns([1.5, 1.5, 2])
         with col1:
-            creditor = st.selectbox("Supplier / Creditor *", CREDITORS_LIST, key=f"creditor_{v}")
-        with col2:
             order_date = st.date_input("Order Date", value=date.today(), key=f"date_{v}")
+        with col2:
+            po_number = st.text_input("PO Number *", key=f"po_{v}")
+        with col3:
+            creditor = st.selectbox("Supplier / Creditor *", CREDITORS_LIST, key=f"creditor_{v}")
 
     st.markdown("#### Product Details")
     order_items = []
@@ -50,7 +54,7 @@ with tab1:
     with st.container(border=True):
         for i in range(st.session_state.item_count):
             st.markdown(f"**Item {i+1}**")
-            c1, c2, c3, c4 = st.columns([3, 1.5, 1.5, 2])
+            c1, c2, c3, c4, c5 = st.columns([3, 1.2, 1.2, 1.2, 1.8])
             
             with c1:
                 p_desc = st.text_input("Product Description", key=f"prod_{v}_{i}")
@@ -58,11 +62,13 @@ with tab1:
                 p_rate = st.number_input("Rate (₹)", min_value=0.0, step=1.0, format="%.2f", key=f"rate_{v}_{i}")
             with c3:
                 p_qty = st.number_input("Quantity", min_value=0.0, step=1.0, key=f"qty_{v}_{i}")
+            with c4:
+                p_unit = st.selectbox("Unit", UNITS_LIST, key=f"unit_{v}_{i}")
             
             p_amt = p_rate * p_qty
             grand_total += p_amt
             
-            with c4:
+            with c5:
                 st.metric(label="Amount", value=f"₹ {p_amt:,.2f}")
                 
             if p_desc.strip():
@@ -70,6 +76,7 @@ with tab1:
                     "Product": p_desc.strip(),
                     "Rate": p_rate,
                     "Quantity": p_qty,
+                    "Unit": p_unit,
                     "Amount": p_amt
                 })
                 
@@ -78,7 +85,9 @@ with tab1:
     st.metric("Grand Total (₹)", f"₹ {grand_total:,.2f}")
 
     if st.button("Save New Order", type="primary"):
-        if creditor == "Select Creditor...":
+        if not po_number.strip():
+            st.warning("⚠️ Please enter a PO Number.")
+        elif creditor == "Select Creditor...":
             st.warning("⚠️ Please select a Creditor.")
         elif not order_items:
             st.warning("⚠️ Please enter at least one product with a description.")
@@ -86,6 +95,7 @@ with tab1:
             payload = {
                 "action": "insert",
                 "Date": order_date.strftime("%Y-%m-%d"),
+                "PONumber": po_number.strip(),
                 "Creditor": creditor,
                 "Status": "⏳ Pending Delivery",
                 "CancellationReason": "",
@@ -95,7 +105,7 @@ with tab1:
                 with st.spinner("Saving to Google Sheets..."):
                     res = requests.post(PURCHASE_APPS_SCRIPT_URL, json=payload, timeout=15)
                     if res.status_code == 200:
-                        st.toast(f"✅ Saved {len(order_items)} item(s) for {creditor}!")
+                        st.toast(f"✅ Saved {len(order_items)} item(s) for PO #{po_number} ({creditor})!")
                         
                         # Reset fields safely by incrementing form version
                         st.session_state.form_version += 1
@@ -143,13 +153,15 @@ with tab2:
         
         for idx, item in enumerate(pending_list):
             with st.container(border=True):
-                st.markdown(f"##### 📅 Date: `{item.get('date')}` | Creditor: **{item.get('creditor')}**")
+                po_disp = item.get('po_number') or item.get('poNumber') or item.get('PONumber') or 'N/A'
+                st.markdown(f"##### 📅 Date: `{item.get('date')}` | PO No: **{po_disp}** | Creditor: **{item.get('creditor')}**")
                 
-                c1, c2, c3, c4 = st.columns([3, 1.5, 1.5, 2])
+                c1, c2, c3, c4, c5 = st.columns([3, 1.2, 1.2, 1.2, 1.8])
                 c1.write(f"**Product:** {item.get('product')}")
                 c2.write(f"**Rate:** ₹{item.get('rate')}")
                 c3.write(f"**Qty:** {item.get('quantity')}")
-                c4.write(f"**Total:** ₹{item.get('amount')}")
+                c4.write(f"**Unit:** {item.get('unit', 'Pcs')}")
+                c5.write(f"**Total:** ₹{item.get('amount')}")
 
                 st.markdown("---")
                 
