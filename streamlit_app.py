@@ -107,7 +107,6 @@ with tab1:
                     if res.status_code == 200:
                         st.toast(f"✅ Saved {len(order_items)} item(s) for PO #{po_number} ({creditor})!")
                         
-                        # Reset fields safely by incrementing form version
                         st.session_state.form_version += 1
                         st.session_state.item_count = 1
                         st.rerun()
@@ -125,7 +124,6 @@ with tab2:
     if st.button("🔄 Refresh Pending List"):
         st.rerun()
 
-    # Fetch Pending Entries
     pending_list = []
     try:
         payload = {"action": "read_pending"}
@@ -153,7 +151,7 @@ with tab2:
         
         for idx, item in enumerate(pending_list):
             with st.container(border=True):
-                po_disp = item.get('po_number') or item.get('poNumber') or item.get('PONumber') or 'N/A'
+                po_disp = item.get('po_number') or 'N/A'
                 st.markdown(f"##### 📅 Date: `{item.get('date')}` | PO No: **{po_disp}** | Creditor: **{item.get('creditor')}**")
                 
                 c1, c2, c3, c4, c5 = st.columns([3, 1.2, 1.2, 1.2, 1.8])
@@ -195,6 +193,7 @@ with tab2:
                                 update_payload = {
                                     "action": "update_status",
                                     "rowIndex": item.get("rowIndex"),
+                                    "colCount": item.get("colCount", 10),
                                     "status": new_status,
                                     "cancellationReason": reason_text.strip()
                                 }
