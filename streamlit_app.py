@@ -5,7 +5,7 @@ from datetime import date
 # ==========================================
 # 🔗 PASTE YOUR APPS SCRIPT WEB APP URL HERE
 # ==========================================
-PURCHASE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyjlawSLUajBvH6CgN4wdMU3Foo5O8daYD1LNdR-Wrc4zEYpxdSHgZDoTi96k4iP7TU/exec"
+PURCHASE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby1ET3Xhkvm1j8Hz_CZzQOgEsM8tIqI3RaRP7KLFYCbvx9U9zaw8PxoWQ962Lqenqnf/exec"
 
 CREDITORS_LIST = [
     "Select Creditor...", "BALAJI ENTERPRISE", "DHANUKA UDYOG PRIVATE LIMITED", 
