@@ -6,7 +6,7 @@ from datetime import date
 # ==========================================
 # 🔗 PASTE YOUR APPS SCRIPT WEB APP URL HERE
 # ==========================================
-PURCHASE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyjlawSLUajBvH6CgN4wdMU3Foo5O8daYD1LNdR-Wrc4zEYpxdSHgZDoTi96k4iP7TU/exec"
+PURCHASE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby1ET3Xhkvm1j8Hz_CZzQOgEsM8tIqI3RaRP7KLFYCbvx9U9zaw8PxoWQ962Lqenqnf/exec"
 
 CREDITORS_LIST = [
     "Select Creditor...", "BALAJI ENTERPRISE", "DHANUKA UDYOG PRIVATE LIMITED", 
@@ -28,11 +28,12 @@ st.title("📦 Purchase Order & Verification System")
 st.sidebar.title("🔐 Access Control")
 admin_pin = st.sidebar.text_input("Enter Admin PIN to edit:", type="password")
 
-IS_ADMIN = (admin_pin == "1234")  # Replace "1234" with your secure PIN
+# Set your desired PIN here (Change "1234" to your preferred password)
+IS_ADMIN = (admin_pin == "1234")
 
 if IS_ADMIN:
     st.sidebar.success("🔓 Admin Mode Active")
-    tab1, tab2, tab3 = st.tabs(["📊 Live Dashboard", "📝 New Order Entry", "🔍 Verify Orders"])
+    tab1, tab2, tab3 = st.tabs(["📊 Live Dashboard", "📝 New Order Entry", "🔍 Verify Pending Deliveries"])
 else:
     st.sidebar.info("👁️ View-Only Mode Active")
     tab1 = st.tabs(["📊 Live Dashboard"])[0]
@@ -43,58 +44,73 @@ if "item_count" not in st.session_state:
 if "form_version" not in st.session_state:
     st.session_state.form_version = 0
 
-# ------------------------------------------------------
-# TAB 1: LIVE DASHBOARD (READ-ONLY VISUALIZATION)
-# ------------------------------------------------------
-with tab1:
-    st.subheader("📋 Purchase Order Visualizations (Read-Only)")
-    
-    if st.button("🔄 Refresh Data"):
-        st.rerun()
-
-    # Fetch Data from Apps Script
-    all_orders = []
+# Helper function to fetch pending orders
+def fetch_pending_orders():
     try:
         payload = {"action": "read_pending"}
         response = requests.post(PURCHASE_APPS_SCRIPT_URL, json=payload, timeout=15)
-        
         if response.status_code == 200:
             content_type = response.headers.get("Content-Type", "")
             if "application/json" in content_type:
                 data = response.json()
                 if isinstance(data, list):
-                    all_orders = data
-                elif isinstance(data, dict) and "error" in data:
-                    st.error(f"Apps Script Error: {data['error']}")
-            else:
-                st.error("⚠️ Access Denied: Apps Script returned HTML instead of JSON.")
-        else:
-            st.error(f"Failed with status code: {response.status_code}")
-    except Exception as e:
-        st.error(f"Failed to fetch order data: {e}")
+                    return data
+    except Exception:
+        pass
+    return []
 
-    if not all_orders:
-        st.info("ℹ️ No orders found in system.")
+# ------------------------------------------------------
+# TAB 1: READ-ONLY LIVE DASHBOARD (VISUALIZATION PORTION)
+# ------------------------------------------------------
+with tab1:
+    st.subheader("📋 Pending Deliveries Visualization (Read-Only)")
+    
+    if st.button("🔄 Refresh Dashboard Data"):
+        st.rerun()
+
+    pending_list = fetch_pending_orders()
+
+    if not pending_list:
+        st.info("🎉 No pending orders found in 'purchase_order_entry'!")
     else:
-        df = pd.DataFrame(all_orders)
+        # Convert list of dicts to DataFrame for easy analysis
+        df = pd.DataFrame(pending_list)
 
-        # Cleanup & convert numeric types for calculations
-        df['amount_clean'] = pd.to_numeric(df['amount'].astype(str).str.replace(',', '').str.replace('₹', ''), errors='coerce').fillna(0)
-        df['quantity_clean'] = pd.to_numeric(df['quantity'].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
+        # Sanitize numeric columns for math calculations
+        df['rate_num'] = pd.to_numeric(df['rate'].astype(str).str.replace(',', '').str.replace('₹', ''), errors='coerce').fillna(0)
+        df['qty_num'] = pd.to_numeric(df['quantity'].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
+        df['amt_num'] = pd.to_numeric(df['amount'].astype(str).str.replace(',', '').str.replace('₹', ''), errors='coerce').fillna(0)
 
-        # Metrics Display
+        # Top Summary Metrics
         m1, m2, m3 = st.columns(3)
-        m1.metric("Pending Items", len(df))
-        m2.metric("Total Pending Quantity", f"{df['quantity_clean'].sum():,.0f}")
-        m3.metric("Total Pending Value", f"₹ {df['amount_clean'].sum():,.2f}")
+        m1.metric("Total Pending Orders", len(df))
+        m2.metric("Total Quantity Pending", f"{df['qty_num'].sum():,.0f}")
+        m3.metric("Total Outstanding Amount", f"₹ {df['amt_num'].sum():,.2f}")
 
         st.markdown("---")
 
-        # Read-Only Formatted Table
-        st.markdown("#### 📑 Current Pending Deliveries")
-        display_df = df[['date', 'po_number', 'creditor', 'product', 'rate', 'quantity', 'unit', 'amount', 'status']].copy()
+        # Search / Filter Section
+        f_col1, f_col2 = st.columns([2, 2])
+        with f_col1:
+            search_query = st.text_input("🔍 Search by PO Number or Product:", placeholder="e.g. STC/26-27 or KRAFT")
+        with f_col2:
+            creditor_filter = st.selectbox("Filter by Supplier / Creditor:", ["All Creditors"] + sorted(list(df['creditor'].unique())))
+
+        # Apply Filters
+        filtered_df = df.copy()
+        if creditor_filter != "All Creditors":
+            filtered_df = filtered_df[filtered_df['creditor'] == creditor_filter]
+        if search_query.strip():
+            sq = search_query.strip().lower()
+            filtered_df = filtered_df[
+                filtered_df['po_number'].astype(str).str.lower().str.contains(sq) |
+                filtered_df['product'].astype(str).str.lower().str.contains(sq)
+            ]
+
+        # Display Data Table (Viewers cannot edit this)
+        display_df = filtered_df[['date', 'po_number', 'creditor', 'product', 'rate_num', 'qty_num', 'unit', 'amt_num', 'status']].copy()
         display_df.columns = ['Date', 'PO Number', 'Creditor', 'Product', 'Rate (₹)', 'Quantity', 'Unit', 'Amount (₹)', 'Status']
-        
+
         st.dataframe(
             display_df,
             use_container_width=True,
@@ -102,7 +118,7 @@ with tab1:
         )
 
 # ------------------------------------------------------
-# TAB 2 & 3: ADMIN-ONLY ACTIONS (NEW ENTRY & VERIFICATION)
+# TAB 2 & 3: ADMIN EDITING ACTIONS
 # ------------------------------------------------------
 if IS_ADMIN:
     # ------------------------------------------------------
@@ -112,7 +128,7 @@ if IS_ADMIN:
         def add_product_row():
             st.session_state.item_count += 1
 
-        v = st.session_state.form_version
+        v = st.session_state.form_version  # Version suffix for widget keys
 
         with st.container(border=True):
             col1, col2, col3 = st.columns([1.5, 1.5, 2])
@@ -182,6 +198,7 @@ if IS_ADMIN:
                         res = requests.post(PURCHASE_APPS_SCRIPT_URL, json=payload, timeout=15)
                         if res.status_code == 200:
                             st.toast(f"✅ Saved {len(order_items)} item(s) for PO #{po_number} ({creditor})!")
+                            
                             st.session_state.form_version += 1
                             st.session_state.item_count = 1
                             st.rerun()
@@ -196,12 +213,17 @@ if IS_ADMIN:
     with tab3:
         st.subheader("📋 Pending Deliveries & Verification")
         
-        if not all_orders:
-            st.info("🎉 No pending orders found!")
+        if st.button("🔄 Refresh Pending List"):
+            st.rerun()
+
+        pending_list = fetch_pending_orders()
+
+        if not pending_list:
+            st.info("🎉 No pending orders found in 'purchase_order_entry'!")
         else:
-            st.markdown(f"Found **{len(all_orders)}** item(s) awaiting delivery verification.")
+            st.markdown(f"Found **{len(pending_list)}** item(s) awaiting delivery verification.")
             
-            for idx, item in enumerate(all_orders):
+            for idx, item in enumerate(pending_list):
                 with st.container(border=True):
                     po_disp = item.get('po_number') or 'N/A'
                     st.markdown(f"##### 📅 Date: `{item.get('date')}` | PO No: **{po_disp}** | Creditor: **{item.get('creditor')}**")
@@ -245,7 +267,7 @@ if IS_ADMIN:
                                     update_payload = {
                                         "action": "update_status",
                                         "rowIndex": item.get("rowIndex"),
-                                        "colCount": 10,
+                                        "colCount": item.get("colCount", 10),
                                         "status": new_status,
                                         "cancellationReason": reason_text.strip()
                                     }
